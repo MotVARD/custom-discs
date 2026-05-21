@@ -1,0 +1,35 @@
+Custom Discs — Third-Party Notices
+==================================
+
+The Custom Discs source code is licensed under the MIT License (see LICENSE).
+
+The compiled Custom Discs JAR additionally bundles the third-party libraries
+listed below. Their class files are merged into the mod JAR. This notice and
+the accompanying license text are included to satisfy the redistribution
+terms of those libraries.
+
+
+GNU Lesser General Public License, version 2.1
+----------------------------------------------
+A verbatim copy is included at: licenses/LGPL-2.1.txt
+
+The following components are distributed under the GNU LGPL v2.1:
+
+  * MP3 SPI (mp3spi)       — com.googlecode.soundlibs:mp3spi:1.9.5.4
+  * JLayer (jlayer)        — com.googlecode.soundlibs:jlayer (bundled transitively)
+  * Vorbis SPI (vorbisspi) — com.googlecode.soundlibs:vorbisspi:1.0.3.3
+  * Tritonus Share         — com.googlecode.soundlibs:tritonus-share (bundled transitively)
+
+  Copyright (C) JavaZOOM and the Tritonus project.
+  Project pages:
+    http://www.javazoom.net/mp3spi/mp3spi.html
+    http://www.javazoom.net/vorbisspi/vorbisspi.html
+    http://www.tritonus.org/
+
+As permitted and required by the LGPL, the bundled libraries may be replaced
+with a modified or alternative compatible version: rebuild Custom Discs from
+its source distribution, substituting the desired library version in the
+'audioEmbed' dependencies of build.gradle.
+
+Note: the jorbis/jogg classes (com.jcraft.*) are NOT bundled — Minecraft already
+ships them, and Custom Discs reuses Minecraft's copies.
