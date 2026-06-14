@@ -16,6 +16,7 @@ import net.neoforged.neoforge.event.entity.player.UseItemOnBlockEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 
 import java.util.Set;
 import java.util.UUID;
@@ -24,6 +25,12 @@ import static com.motvard.customdiscs.CustomDiscsMod.MOD_ID;
 
 @EventBusSubscriber(modid = MOD_ID, bus = EventBusSubscriber.Bus.GAME)
 public class ServerEventHandler {
+
+    @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        JukeboxTicker.clear();
+        JukeboxTracker.clear();
+    }
 
     @SubscribeEvent
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
