@@ -62,7 +62,7 @@ public class JukeboxTicker {
 
         if (isDisc) {
             CustomDiscData currentData = currentItem.get(ModDataComponents.DISC_DATA.get());
-            CustomDiscData prevData    = wasDisc ? prevItem.get(ModDataComponents.DISC_DATA.get()) : null;
+            CustomDiscData prevData = wasDisc ? prevItem.get(ModDataComponents.DISC_DATA.get()) : null;
 
             boolean discChanged = !wasDisc || !Objects.equals(currentData, prevData);
 
@@ -154,5 +154,11 @@ public class JukeboxTicker {
 
         JukeboxTracker.untrack(level.dimension(), pos);
         CustomDiscsMod.LOGGER.debug("[JukeboxTicker] Jukebox removed @ {} — playback stopped", pos);
+    }
+
+    /** Clear all tick state. Called when the server is stopping to release references. */
+    public static void clear() {
+        PREV_ITEM.clear();
+        SESSIONS.clear();
     }
 }
