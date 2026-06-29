@@ -25,7 +25,6 @@ public class CustomDiscsMod {
         ModJukeboxSongs.JUKEBOX_SONGS.register(modEventBus);
         ModDataComponents.DATA_COMPONENTS.register(modEventBus);
         ModItems.ITEMS.register(modEventBus);
-        ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
 
         modEventBus.addListener(CustomDiscsMod::registerPackets);
 

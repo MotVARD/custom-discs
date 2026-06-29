@@ -112,8 +112,11 @@ public class ServerEventHandler {
         if (event.getLevel().isClientSide()) return;
         if (event.getLevel() instanceof Level level) {
             var dim = level.dimension();
-            event.getChunk().getBlockEntitiesPos().forEach(pos -> {
-                if (level.getBlockState(pos).is(Blocks.JUKEBOX)) {
+            var chunk = event.getChunk();
+            // Read from the chunk itself, never level.getBlockState: the latter re-resolves the
+            // chunk through ServerChunkCache and can trigger a synchronous chunk load.
+            chunk.getBlockEntitiesPos().forEach(pos -> {
+                if (chunk.getBlockState(pos).is(Blocks.JUKEBOX)) {
                     JukeboxTracker.track(dim, pos);
                 }
             });
@@ -125,8 +128,12 @@ public class ServerEventHandler {
         if (event.getLevel().isClientSide()) return;
         if (!(event.getLevel() instanceof ServerLevel serverLevel)) return;
         var dim = serverLevel.dimension();
-        event.getChunk().getBlockEntitiesPos().forEach(pos -> {
-            if (serverLevel.getBlockState(pos).is(Blocks.JUKEBOX)) {
+        var chunk = event.getChunk();
+        // Critical: read block states from the chunk being unloaded, not from the level.
+        // serverLevel.getBlockState() re-resolves the chunk and forces a synchronous load, which
+        // deadlocks the server thread while it processes chunk unloads during world save/shutdown.
+        chunk.getBlockEntitiesPos().forEach(pos -> {
+            if (chunk.getBlockState(pos).is(Blocks.JUKEBOX)) {
                 JukeboxTracker.untrack(dim, pos);
                 JukeboxTicker.invalidate(dim, pos);
                 JukeboxEventHandler.onDiscRemoved(serverLevel, pos);

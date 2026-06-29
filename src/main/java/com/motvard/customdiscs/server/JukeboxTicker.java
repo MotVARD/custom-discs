@@ -26,9 +26,9 @@ public class JukeboxTicker {
 
     private record JukeboxKey(ResourceKey<Level> dim, BlockPos pos) {}
 
-    private record DiscSession(Set<UUID> listeners, long startedAtMs) {
+    private record DiscSession(Set<UUID> listeners) {
         static DiscSession create() {
-            return new DiscSession(ConcurrentHashMap.newKeySet(), System.currentTimeMillis());
+            return new DiscSession(ConcurrentHashMap.newKeySet());
         }
     }
 
@@ -82,7 +82,11 @@ public class JukeboxTicker {
                 SESSIONS.put(key, DiscSession.create());
             }
 
-            syncWithNearbyPlayers(serverLevel, pos, currentItem, key);
+            // Use the jukebox's own play position (persisted across save/load and advanced by
+            // vanilla each tick) as the playback offset, so late joiners sync to the real position
+            // and a disc resumes where it left off instead of restarting on every world reload.
+            long playOffsetMs = blockEntity.getSongPlayer().getTicksSinceSongStarted() * 50L;
+            syncWithNearbyPlayers(serverLevel, pos, currentItem, key, playOffsetMs);
 
         } else if (wasDisc) {
             SESSIONS.remove(key);
@@ -96,7 +100,7 @@ public class JukeboxTicker {
         }
     }
 
-    private static void syncWithNearbyPlayers(ServerLevel level, BlockPos pos, ItemStack disc, JukeboxKey key) {
+    private static void syncWithNearbyPlayers(ServerLevel level, BlockPos pos, ItemStack disc, JukeboxKey key, long playOffsetMs) {
         DiscSession session = SESSIONS.get(key);
         if (session == null) {
             CustomDiscsMod.LOGGER.warn("[JukeboxTicker] Missing session for {}", pos);
@@ -105,7 +109,6 @@ public class JukeboxTicker {
 
         double radius = Config.effectiveBroadcastRadius();
         double radiusSq = radius * radius;
-        long now = System.currentTimeMillis();
 
         for (ServerPlayer player : level.players()) {
             double distSq = player.blockPosition().distSqr(pos);
@@ -113,7 +116,7 @@ public class JukeboxTicker {
             UUID uuid = player.getUUID();
 
             if (inRadius && !session.listeners().contains(uuid)) {
-                JukeboxEventHandler.sendToPlayer(player, pos, disc, now - session.startedAtMs());
+                JukeboxEventHandler.sendToPlayer(player, pos, disc, playOffsetMs);
                 session.listeners().add(uuid);
             } else if (!inRadius && session.listeners().contains(uuid)) {
                 session.listeners().remove(uuid);
