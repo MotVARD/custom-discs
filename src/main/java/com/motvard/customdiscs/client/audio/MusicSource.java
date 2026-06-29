@@ -18,7 +18,7 @@ public final class MusicSource {
         if (rawSource == null || !rawSource.startsWith(SERVER_SCHEME)) {
             // Only server-hosted files are accepted, so a malicious server cannot make
             // the client fetch an arbitrary location.
-            throw new IOException("Unsupported audio source — only " + SERVER_SCHEME + " is allowed: " + rawSource);
+            throw new IOException("Unsupported audio source, only " + SERVER_SCHEME + " is allowed: " + rawSource);
         }
         InputStream raw = openServerFile(rawSource.substring(SERVER_SCHEME.length()));
         return new BufferedInputStream(raw, PREFETCH_BYTES);

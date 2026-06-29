@@ -14,9 +14,9 @@ import java.io.IOException;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Verifies AudioStreamFactory.openAsPcm always yields the canonical format the gain
- * code expects (16-bit signed little-endian PCM) — or fails cleanly — and never
- * returns a foreign-format stream that TrackPlayer.applyGainInPlace would corrupt.
+ * Verifies AudioStreamFactory.openAsPcm always yields the canonical format PcmAudioStream
+ * accepts (16-bit signed little-endian PCM), or fails cleanly, and never returns a
+ * foreign-format stream that PcmAudioStream would reject.
  */
 class AudioStreamFactoryTest {
 
@@ -73,7 +73,7 @@ class AudioStreamFactoryTest {
         try {
             wav = encode(fmt, AudioFileFormat.Type.WAVE, 1000);
         } catch (IllegalArgumentException | IOException e) {
-            return; // this JRE cannot author 24-bit WAV — nothing to assert
+            return; // this JRE cannot author 24-bit WAV, nothing to assert
         }
         try (AudioInputStream pcm = AudioStreamFactory.openAsPcm(new ByteArrayInputStream(wav), "24bit-wav")) {
             // Either it converts cleanly to canonical 16-bit ...

@@ -41,7 +41,12 @@ public final class CustomDiscSoundInstance extends AbstractTickableSoundInstance
         this.x = pos.getX() + 0.5;
         this.y = pos.getY() + 0.5;
         this.z = pos.getZ() + 0.5;
-        this.volume = 1.0f;
+        // The engine fades a LINEAR sound to silence at max(volume, 1) * attenuation_distance
+        // blocks (attenuation_distance = 16 in sounds.json), so volume = maxAudibleDistance / 16
+        // makes the disc fade out exactly at the configured distance. Loudness is separately
+        // clamped to the Records category volume, and the disc stays an ordinary positional
+        // record, so Sound Physics Remastered applies its reverb/occlusion on top.
+        this.volume = (float) Math.max(1.0, Config.SERVER.maxAudibleDistance.get() / 16.0);
         this.pitch = 1.0f;
         this.attenuation = Attenuation.LINEAR;
         this.looping = false;
@@ -75,11 +80,11 @@ public final class CustomDiscSoundInstance extends AbstractTickableSoundInstance
 
     @Override
     public void tick() {
-        // Position is fixed at the jukebox — nothing to update each tick.
-        // Lifecycle (stopping when finished, when jukebox is gone) is handled by
+        // Position is fixed at the jukebox, so there is nothing to update each tick. Lifecycle
+        // (stopping when finished or when the jukebox is gone) is handled by
         // DiscPlaybackManager.stopOrphaned() and explicit StopDiscPacket from the server.
         if (Config.CLIENT.enableMusicDownload.get()) return;
-        // Player flipped the opt-out while a track is playing — stop respectfully.
+        // Player turned the opt-out on while a track is playing, so stop it.
         stop();
     }
 

@@ -15,9 +15,9 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Client-side registry of active sound instances per jukebox. Hands playback off to
- * Minecraft's {@link SoundManager} — OpenAL handles 3D positioning, distance attenuation,
- * panning and occlusion natively. No more per-disc threads or audio lines.
+ * Client-side registry of active sound instances per jukebox. Playback is handed to
+ * Minecraft's {@link SoundManager}, so OpenAL handles 3D positioning, distance attenuation,
+ * panning and occlusion.
  */
 public class DiscPlaybackManager {
 
@@ -33,7 +33,7 @@ public class DiscPlaybackManager {
             Minecraft.getInstance().getSoundManager().stop(previous);
         }
 
-        CustomDiscsMod.LOGGER.debug("[DiscPlaybackManager] Start: «{}» @ {} (offset={}ms)", title, pos, startOffsetMs);
+        CustomDiscsMod.LOGGER.debug("[DiscPlaybackManager] Start: '{}' @ {} (offset={}ms)", title, pos, startOffsetMs);
         Minecraft.getInstance().getSoundManager().play(instance);
     }
 
@@ -46,12 +46,8 @@ public class DiscPlaybackManager {
     }
 
     public static void stopAll() {
-        // Order matters on shutdown. Fail every in-flight download FIRST so the
-        // BlockingInputStream feeding each AudioStream wakes up with an
-        // IOException — the SoundEngine streaming reader thread then unwinds
-        // immediately. If we stopped sounds first, the SoundEngine destroy()
-        // could deadlock waiting for the streaming reader to finish a read()
-        // that nobody is ever going to satisfy.
+        // Fail in-flight downloads before stopping sounds. Otherwise SoundEngine.destroy() can
+        // deadlock waiting on a streaming read() that nobody will ever satisfy.
         PacketFileDownloader.cancelAll();
         SoundManager mgr = Minecraft.getInstance().getSoundManager();
         for (CustomDiscSoundInstance instance : ACTIVE.values()) {
@@ -74,7 +70,7 @@ public class DiscPlaybackManager {
                 return true; // finished naturally
             }
             if (level.isLoaded(pos) && !level.getBlockState(pos).is(Blocks.JUKEBOX)) {
-                CustomDiscsMod.LOGGER.debug("[DiscPlaybackManager] Jukebox gone @ {} — stopping orphaned track", pos);
+                CustomDiscsMod.LOGGER.debug("[DiscPlaybackManager] Jukebox gone @ {}, stopping orphaned track", pos);
                 mgr.stop(instance);
                 return true;
             }

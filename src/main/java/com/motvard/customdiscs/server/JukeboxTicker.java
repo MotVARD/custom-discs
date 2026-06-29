@@ -103,7 +103,7 @@ public class JukeboxTicker {
             return;
         }
 
-        double radius = Config.SERVER.broadcastRadius.get();
+        double radius = Config.effectiveBroadcastRadius();
         double radiusSq = radius * radius;
         long now = System.currentTimeMillis();
 
@@ -128,6 +128,13 @@ public class JukeboxTicker {
         SESSIONS.remove(key);
     }
 
+    /** Drop all per-jukebox tick state. Called when the server stops so it does not leak into a
+     *  later world load in the same JVM (singleplayer). */
+    public static void clear() {
+        PREV_ITEM.clear();
+        SESSIONS.clear();
+    }
+
     /** True if a playback session is currently active for the jukebox at this position. */
     public static boolean hasSession(ResourceKey<Level> dim, BlockPos pos) {
         return SESSIONS.containsKey(new JukeboxKey(dim, pos));
@@ -135,7 +142,7 @@ public class JukeboxTicker {
 
     /**
      * A tracked jukebox no longer exists at this position (explosion, piston, /setblock,
-     * world edit — none of which fire BlockEvent.BreakEvent). Stop playback for every
+     * world edit, none of which fire BlockEvent.BreakEvent). Stop playback for every
      * listener and drop all tracking state.
      */
     public static void handleRemoved(ServerLevel level, BlockPos pos) {
@@ -153,6 +160,6 @@ public class JukeboxTicker {
         }
 
         JukeboxTracker.untrack(level.dimension(), pos);
-        CustomDiscsMod.LOGGER.debug("[JukeboxTicker] Jukebox removed @ {} — playback stopped", pos);
+        CustomDiscsMod.LOGGER.debug("[JukeboxTicker] Jukebox removed @ {}, playback stopped", pos);
     }
 }

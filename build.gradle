@@ -69,7 +69,7 @@ dependencies {
     implementation "net.neoforged:neoforge:${neo_version}"
 
     // MP3/OGG support. Cannot use jarJar: mp3spi and vorbisspi both contain package
-    // javazoom.spi — NeoForge loads jar-in-jar files as named JPMS modules, and Java 9+
+    // javazoom.spi, and NeoForge loads jar-in-jar files as named JPMS modules; Java 9+
     // forbids split packages between named modules (ResolutionException at startup).
     // Instead we merge their class files directly into the mod JAR (one module, no conflict).
     audioEmbed 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
@@ -86,11 +86,11 @@ tasks.named('test', Test) {
 
 // Merge audio library classes into the mod JAR at build time.
 // We drop the manifest, JPMS descriptor, signatures and SPI service files (the audio
-// readers are instantiated directly), but KEEP any LICENSE/NOTICE files — the embedded
+// readers are instantiated directly), but KEEP any LICENSE/NOTICE files: the embedded
 // mp3spi/vorbisspi/tritonus libraries are LGPL and must ship with their license.
 tasks.named('jar', Jar).configure {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    // GameTests are dev-only — they run via the gameTestServer task, not in production.
+    // GameTests are dev-only: they run via the gameTestServer task, not in production.
     exclude 'com/motvard/customdiscs/gametest/**'
     exclude 'data/customdiscs/structure/**'
     from({
@@ -104,7 +104,7 @@ tasks.named('jar', Jar).configure {
         exclude 'META-INF/versions/**'
         exclude 'META-INF/maven/**'
         exclude '**/module-info.class'
-        // jorbis + jogg are already bundled with Minecraft — embedding them causes
+        // jorbis + jogg are already bundled with Minecraft, and embedding them causes a
         // split-package ResolutionException. vorbisspi will use Minecraft's copies.
         exclude 'com/jcraft/**'
     }

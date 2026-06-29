@@ -26,11 +26,10 @@ import java.util.Map;
 
 public class DiscCommand {
 
-    /** Real uploaded files: regular files, excluding dotfiles and in-progress .partial files. */
-    private static final FileFilter UPLOADS = f ->
-            f.isFile() && !f.getName().startsWith(".") && !f.getName().endsWith(ModPaths.PARTIAL_SUFFIX);
+    /** Real uploaded files: regular audio files, excluding dotfiles and in-progress .partial files. */
+    private static final FileFilter UPLOADS = f -> f.isFile() && CustomDiscFiles.isPublicUpload(f.getName());
 
-    /** Tab-completion for /disc delete — suggests the names currently on the server. */
+    /** Tab-completion for /disc delete: suggests the names currently on the server. */
     private static final SuggestionProvider<CommandSourceStack> FILE_SUGGESTIONS =
             (ctx, builder) -> SharedSuggestionProvider.suggest(uploadedFileNames(), builder);
 
@@ -85,7 +84,7 @@ public class DiscCommand {
         for (File f : files) {
             String uploader = uploaders.getOrDefault(f.getName(), "?");
             msg.append(Component.literal(
-                    "\n  " + f.getName() + " — " + formatSize(f.length()) + " — " + uploader));
+                    "\n  " + f.getName() + " - " + formatSize(f.length()) + " - " + uploader));
         }
         ctx.getSource().sendSuccess(() -> msg, false);
         return files.length;

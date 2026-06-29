@@ -1,9 +1,9 @@
 package com.motvard.customdiscs.network;
 
+import com.motvard.customdiscs.Config;
 import com.motvard.customdiscs.CustomDiscsMod;
 import com.motvard.customdiscs.client.audio.PacketFileDownloader;
 import com.motvard.customdiscs.util.CustomDiscFiles;
-import net.minecraft.Util;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -35,17 +35,30 @@ public record DownloadChunkPacket(String fileName, byte[] data, int offset, int 
     @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
 
     public void handle(IPayloadContext context) {
-        // Validate on the network thread, then hand off to the I/O pool. We never block
-        // the main client thread on chunk writing or queue backpressure.
+        // Validate on the network thread (in arrival order), then hand off. PacketFileDownloader
+        // applies chunks on a per-download single thread, so the main client thread never blocks
+        // on disk writes or queue backpressure and chunk order is preserved.
         if (context.player() == null || !context.player().level().isClientSide) return;
 
         String safeName = CustomDiscFiles.sanitize(fileName);
+        if (CustomDiscFiles.isSuspiciousPath(safeName)) {
+            CustomDiscsMod.LOGGER.warn("[DownloadChunkPacket] Suspicious file name from server: {}", fileName);
+            return;
+        }
         if (!CustomDiscFiles.isValidChunk(offset, data.length, totalSize)) {
             CustomDiscsMod.LOGGER.warn("[DownloadChunkPacket] Invalid chunk: file={} offset={} len={} total={}",
                     safeName, offset, data.length, totalSize);
             return;
         }
+        // A malicious server must not be able to grow the client cache past the size the
+        // server itself advertises as the upload limit.
+        int maxSize = Config.SERVER.maxUploadBytes.get();
+        if (totalSize > maxSize) {
+            CustomDiscsMod.LOGGER.warn("[DownloadChunkPacket] Rejected oversized transfer: {} ({} > {})",
+                    safeName, totalSize, maxSize);
+            return;
+        }
 
-        Util.ioPool().execute(() -> PacketFileDownloader.acceptChunk(safeName, data, offset, totalSize));
+        PacketFileDownloader.acceptChunk(safeName, data, offset, totalSize);
     }
 }

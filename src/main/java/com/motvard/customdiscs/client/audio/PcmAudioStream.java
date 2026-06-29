@@ -11,8 +11,8 @@ import java.nio.ByteOrder;
 /**
  * Adapter from a canonical 16-bit signed little-endian PCM {@link AudioInputStream}
  * (the format {@link AudioStreamFactory#openAsPcm} produces) into Minecraft's
- * {@link AudioStream}. Always emits mono — stereo input is downmixed by averaging
- * the left and right samples, because OpenAL only does 3D positioning on mono sources.
+ * {@link AudioStream}. Always emits mono: stereo input is downmixed by averaging the left
+ * and right samples, because OpenAL only does 3D positioning on mono sources.
  */
 public final class PcmAudioStream implements AudioStream {
 

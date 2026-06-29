@@ -28,4 +28,9 @@ public class JukeboxTracker {
     public static Set<BlockPos> getAll(ResourceKey<Level> dim) {
         return tracked.getOrDefault(dim, Collections.emptySet());
     }
+
+    /** Drop all tracked jukeboxes. Called when the server stops. */
+    public static void clear() {
+        tracked.clear();
+    }
 }

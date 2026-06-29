@@ -62,7 +62,7 @@ public final class UploadAttribution {
 
     private static void save(Properties props) {
         try (Writer w = Files.newBufferedWriter(STORE.toPath(), StandardCharsets.UTF_8)) {
-            props.store(w, "Custom Discs — file uploader attribution");
+            props.store(w, "Custom Discs file uploader attribution");
         } catch (IOException e) {
             CustomDiscsMod.LOGGER.warn("[UploadAttribution] Could not write {}: {}", STORE.getName(), e.getMessage());
         }

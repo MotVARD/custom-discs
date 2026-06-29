@@ -22,7 +22,9 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
 public record UploadChunkPacket(String fileName, String title, byte[] data, int offset, int totalSize) implements CustomPacketPayload {
@@ -54,19 +56,18 @@ public record UploadChunkPacket(String fileName, String title, byte[] data, int 
             if (context.player().level().isClientSide) return;
 
             ServerPlayer player = (ServerPlayer) context.player();
+            String uploaderName = player.getName().getString();
             String safeName = CustomDiscFiles.sanitize(fileName);
 
-            if (!CustomDiscFiles.hasAllowedExtension(safeName)) {
-                CustomDiscsMod.LOGGER.warn("Player {} tried to upload disallowed file type: {}",
-                        player.getName().getString(), safeName);
+            if (CustomDiscFiles.isSuspiciousPath(safeName) || !CustomDiscFiles.hasAllowedExtension(safeName)) {
+                CustomDiscsMod.LOGGER.warn("Player {} tried to upload disallowed name: {}", uploaderName, fileName);
                 player.sendSystemMessage(Component.translatable("customdiscs.error.disallowed_type"));
                 return;
             }
 
             int maxSize = Config.SERVER.maxUploadBytes.get();
             if (totalSize <= 0 || totalSize > maxSize) {
-                CustomDiscsMod.LOGGER.warn("Player {} sent totalSize={} (limit {})",
-                        player.getName().getString(), totalSize, maxSize);
+                CustomDiscsMod.LOGGER.warn("Player {} sent totalSize={} (limit {})", uploaderName, totalSize, maxSize);
                 player.sendSystemMessage(Component.translatable(
                         "customdiscs.error.file_too_large", maxSize / 1024 / 1024));
                 return;
@@ -74,17 +75,17 @@ public record UploadChunkPacket(String fileName, String title, byte[] data, int 
 
             if (!CustomDiscFiles.isValidChunk(offset, data.length, totalSize)) {
                 CustomDiscsMod.LOGGER.warn("Player {} sent chunk with invalid offset={} len={} total={}",
-                        player.getName().getString(), offset, data.length, totalSize);
+                        uploaderName, offset, data.length, totalSize);
                 return;
             }
 
             if (!ModPaths.ensureDir(ModPaths.UPLOADS_DIR)) return;
             File uploadDir = ModPaths.UPLOADS_DIR.toFile();
-            File partial = new File(uploadDir, safeName + ModPaths.PARTIAL_SUFFIX);
+            File partial = new File(uploadDir, UploadSession.partialName(safeName, player.getUUID()));
             File finalFile = new File(uploadDir, safeName);
 
             if (offset == 0) {
-                // Deduplication: file already exists — give disc immediately, no cooldown spent.
+                // Deduplication: file already exists, give disc immediately, no cooldown spent.
                 if (finalFile.exists() && finalFile.length() > 0) {
                     giveDisc(player, safeName);
                     player.sendSystemMessage(Component.translatable("customdiscs.info.file_exists", title));
@@ -92,7 +93,6 @@ public record UploadChunkPacket(String fileName, String title, byte[] data, int 
                     return;
                 }
 
-                String uploaderName = player.getName().getString();
                 UploadSession.StartResult start = UploadSession.tryStart(player.getUUID(), uploaderName, safeName, totalSize);
                 switch (start) {
                     case UploadSession.StartResult.CooldownRemaining(long secs) -> {
@@ -100,19 +100,18 @@ public record UploadChunkPacket(String fileName, String title, byte[] data, int 
                         return;
                     }
                     case UploadSession.StartResult.QuotaExceeded ignored -> {
-                        CustomDiscsMod.LOGGER.warn("Player {} upload rejected — storage full", uploaderName);
+                        CustomDiscsMod.LOGGER.warn("Player {} upload rejected, storage full", uploaderName);
                         player.sendSystemMessage(Component.translatable("customdiscs.error.storage_full"));
                         return;
                     }
                     case UploadSession.StartResult.PerPlayerLimitReached(int limit) -> {
-                        CustomDiscsMod.LOGGER.warn("Player {} upload rejected — per-player file limit reached ({})",
+                        CustomDiscsMod.LOGGER.warn("Player {} upload rejected, per-player file limit reached ({})",
                                 uploaderName, limit);
                         player.sendSystemMessage(Component.translatable("customdiscs.error.upload_quota_exceeded", limit));
                         return;
                     }
                     case UploadSession.StartResult.AlreadyInProgress ignored -> {
-                        CustomDiscsMod.LOGGER.warn("Player {} started a second upload of {} — ignoring",
-                                uploaderName, safeName);
+                        CustomDiscsMod.LOGGER.warn("Player {} started a second upload of {}, ignoring", uploaderName, safeName);
                         return;
                     }
                     case UploadSession.StartResult.Ok ignored -> {
@@ -121,35 +120,67 @@ public record UploadChunkPacket(String fileName, String title, byte[] data, int 
                         }
                     }
                 }
+            } else if (!UploadSession.isOwner(player.getUUID(), safeName)) {
+                // No session was started for this name by this player: a later chunk must not
+                // be able to write into (or finalize) an upload that skipped tryStart.
+                CustomDiscsMod.LOGGER.warn("Player {} sent chunk for {} without an active upload session", uploaderName, safeName);
+                return;
             }
 
+            boolean complete = (offset + data.length) >= totalSize;
             try (RandomAccessFile raf = new RandomAccessFile(partial, "rw")) {
                 raf.seek(offset);
                 raf.write(data);
-
-                if ((offset + data.length) >= totalSize) {
-                    raf.setLength(totalSize);
-                    raf.close();
-
-                    Files.move(partial.toPath(), finalFile.toPath(),
-                            StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                    UploadSession.markComplete(player.getUUID(), safeName);
-                    UploadAttribution.record(safeName, player.getName().getString());
-
-                    CustomDiscsMod.LOGGER.info("File {} fully uploaded by {} ({} bytes)",
-                            safeName, player.getName().getString(), totalSize);
-
-                    giveDisc(player, safeName);
-                    player.sendSystemMessage(Component.translatable("customdiscs.success.disc_created", title));
-                    PacketDistributor.sendToPlayer(player, new UploadCompletePacket(true, title));
-                }
+                if (complete) raf.setLength(totalSize);
             } catch (IOException e) {
                 CustomDiscsMod.LOGGER.error("Error writing chunk for {}: {}", safeName, e.getMessage());
                 UploadSession.markFailed(safeName);
+                partial.delete();
+                player.sendSystemMessage(Component.translatable("customdiscs.error.save_failed", e.getMessage()));
+                PacketDistributor.sendToPlayer(player, new UploadCompletePacket(false, e.getMessage()));
+                return;
+            }
+
+            if (!complete) return;
+
+            // Final chunk written and the file handle is closed: re-check the storage quota
+            // (it could have filled since tryStart) before promoting the partial to a real file.
+            if (UploadSession.exceedsStorageQuota(totalSize)) {
+                CustomDiscsMod.LOGGER.warn("Player {} upload rejected at finalize, storage full", uploaderName);
+                UploadSession.markFailed(safeName);
+                partial.delete();
+                player.sendSystemMessage(Component.translatable("customdiscs.error.storage_full"));
+                PacketDistributor.sendToPlayer(player, new UploadCompletePacket(false, "storage full"));
+                return;
+            }
+
+            try {
+                moveIntoPlace(partial.toPath(), finalFile.toPath());
+                UploadSession.markComplete(player.getUUID(), safeName);
+                UploadAttribution.record(safeName, uploaderName);
+
+                CustomDiscsMod.LOGGER.info("File {} fully uploaded by {} ({} bytes)", safeName, uploaderName, totalSize);
+
+                giveDisc(player, safeName);
+                player.sendSystemMessage(Component.translatable("customdiscs.success.disc_created", title));
+                PacketDistributor.sendToPlayer(player, new UploadCompletePacket(true, title));
+            } catch (IOException e) {
+                CustomDiscsMod.LOGGER.error("Error finalising {}: {}", safeName, e.getMessage());
+                UploadSession.markFailed(safeName);
+                partial.delete();
                 player.sendSystemMessage(Component.translatable("customdiscs.error.save_failed", e.getMessage()));
                 PacketDistributor.sendToPlayer(player, new UploadCompletePacket(false, e.getMessage()));
             }
         });
+    }
+
+    /** Atomic move where the filesystem allows it, otherwise a plain replace. */
+    private static void moveIntoPlace(Path from, Path to) throws IOException {
+        try {
+            Files.move(from, to, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private void giveDisc(ServerPlayer player, String safeName) {

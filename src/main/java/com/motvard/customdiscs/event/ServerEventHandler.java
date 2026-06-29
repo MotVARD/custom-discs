@@ -16,6 +16,7 @@ import net.neoforged.neoforge.event.entity.player.UseItemOnBlockEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 
 import java.util.Set;
 import java.util.UUID;
@@ -24,6 +25,15 @@ import static com.motvard.customdiscs.CustomDiscsMod.MOD_ID;
 
 @EventBusSubscriber(modid = MOD_ID, bus = EventBusSubscriber.Bus.GAME)
 public class ServerEventHandler {
+
+    @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        // Static state would otherwise leak into the next world loaded in this JVM (singleplayer),
+        // leaving stale jukebox sessions ticking and old cooldowns/locks in place.
+        JukeboxTicker.clear();
+        JukeboxTracker.clear();
+        UploadSession.clear();
+    }
 
     @SubscribeEvent
     public static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
@@ -40,8 +50,8 @@ public class ServerEventHandler {
 
         JukeboxTracker.track(serverLevel.dimension(), pos);
 
-        // The vanilla jukebox updates its inventory *after* this event fires, so
-        // schedule the sync for the next tick — by then getTheItem() is correct.
+        // The vanilla jukebox updates its inventory after this event fires, so schedule the
+        // sync for the next tick, by which point getTheItem() is correct.
         serverLevel.getServer().tell(new TickTask(
                 serverLevel.getServer().getTickCount() + 1,
                 () -> JukeboxTicker.tickNow(serverLevel, pos)
@@ -71,21 +81,19 @@ public class ServerEventHandler {
         Set<BlockPos> positions = JukeboxTracker.getAll(serverLevel.dimension());
         if (positions.isEmpty()) return;
 
-        double radius = com.motvard.customdiscs.Config.SERVER.broadcastRadius.get();
+        double radius = com.motvard.customdiscs.Config.effectiveBroadcastRadius();
         double radiusSq = radius * radius;
         var dim = serverLevel.dimension();
 
         positions.forEach(pos -> {
             if (serverLevel.getBlockEntity(pos) instanceof JukeboxBlockEntity jukebox) {
-                // Proximity gating: skip jukeboxes with no nearby players AND no active session.
-                // Removed-disc detection still runs through session-bearing jukeboxes; chunk
-                // unload / block break / orphan detection handle the cleanup cases.
+                // Skip jukeboxes with no nearby players and no active session.
                 if (!JukeboxTicker.hasSession(dim, pos) && !hasPlayerWithin(serverLevel, pos, radiusSq)) {
                     return;
                 }
                 JukeboxTicker.tick(serverLevel, pos, jukebox);
             } else if (serverLevel.isLoaded(pos)) {
-                // Chunk is loaded but the jukebox is gone (explosion, piston, /setblock, ...) —
+                // Chunk is loaded but the jukebox is gone (explosion, piston, /setblock, ...) and
                 // BlockEvent.BreakEvent never fired, so stop playback here.
                 JukeboxTicker.handleRemoved(serverLevel, pos);
             }

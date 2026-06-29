@@ -14,8 +14,8 @@ public final class CustomDiscFiles {
 
     /**
      * Strips any directory components, returning just the bare file name.
-     * Handles both '/' and '\' regardless of the host OS — File.getName() only
-     * recognises the platform separator, which would miss '\' on a Linux server.
+     * Handles both '/' and '\' regardless of the host OS, since File.getName() only
+     * recognises the platform separator and would miss '\' on a Linux server.
      */
     public static String sanitize(String name) {
         if (name == null) return "";
@@ -40,6 +40,18 @@ public final class CustomDiscFiles {
     public static boolean isSuspiciousPath(String name) {
         return name == null || name.isEmpty()
                 || name.contains("..") || name.contains("/") || name.contains("\\");
+    }
+
+    /**
+     * True if the name is a real, finalized upload a client may request: a regular audio
+     * file, not a dotfile (e.g. the attribution sidecar) and not an in-progress .partial.
+     */
+    public static boolean isPublicUpload(String name) {
+        return name != null
+                && !name.isEmpty()
+                && !name.startsWith(".")
+                && !name.endsWith(ModPaths.PARTIAL_SUFFIX)
+                && hasAllowedExtension(name);
     }
 
     /** Validates a transfer chunk against the declared total file size. */

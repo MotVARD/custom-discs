@@ -25,7 +25,7 @@ public class JukeboxEventHandler {
     }
 
     public static void onDiscRemoved(ServerLevel level, BlockPos pos) {
-        double radius = Config.SERVER.broadcastRadius.get();
+        double radius = Config.effectiveBroadcastRadius();
         double radiusSq = radius * radius;
         StopDiscPacket packet = new StopDiscPacket(pos);
         for (ServerPlayer player : level.players()) {

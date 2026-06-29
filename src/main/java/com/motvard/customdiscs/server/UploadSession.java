@@ -39,12 +39,8 @@ public final class UploadSession {
             }
         }
 
-        int maxTotalMb = Config.SERVER.maxTotalStorageMb.get();
-        if (maxTotalMb > 0) {
-            long limitBytes = (long) maxTotalMb * 1024 * 1024;
-            if (currentUploadFolderSize() + totalSize > limitBytes) {
-                return new StartResult.QuotaExceeded();
-            }
+        if (exceedsStorageQuota(totalSize)) {
+            return new StartResult.QuotaExceeded();
         }
 
         int perPlayerLimit = Config.SERVER.perPlayerFileLimit.get();
@@ -63,6 +59,25 @@ public final class UploadSession {
         return new StartResult.Ok();
     }
 
+    /** True if {@code uploader} currently holds the in-progress slot for {@code safeName}. */
+    public static boolean isOwner(UUID uploader, String safeName) {
+        return uploader.equals(IN_PROGRESS.get(safeName));
+    }
+
+    /** True if adding {@code additionalBytes} would exceed the configured storage cap (0 = unlimited). */
+    public static boolean exceedsStorageQuota(int additionalBytes) {
+        int maxTotalMb = Config.SERVER.maxTotalStorageMb.get();
+        if (maxTotalMb <= 0) return false;
+        long limitBytes = (long) maxTotalMb * 1024 * 1024;
+        return currentUploadFolderSize() + additionalBytes > limitBytes;
+    }
+
+    /** Name of a player's in-progress partial file. Namespaced by UUID so two players uploading
+     *  the same file name cannot write into each other's partial. */
+    public static String partialName(String safeName, UUID uploader) {
+        return safeName + "." + uploader + ModPaths.PARTIAL_SUFFIX;
+    }
+
     public static void markComplete(UUID uploader, String safeName) {
         IN_PROGRESS.remove(safeName);
         UPLOAD_COOLDOWNS.put(uploader, System.currentTimeMillis());
@@ -75,10 +90,17 @@ public final class UploadSession {
     public static void cleanupOnDisconnect(UUID uploader) {
         IN_PROGRESS.entrySet().removeIf(e -> {
             if (!e.getValue().equals(uploader)) return false;
-            ModPaths.UPLOADS_DIR.resolve(e.getKey() + ModPaths.PARTIAL_SUFFIX).toFile().delete();
+            ModPaths.UPLOADS_DIR.resolve(partialName(e.getKey(), uploader)).toFile().delete();
             CustomDiscsMod.LOGGER.info("[UploadSession] Cleaned up partial upload for disconnected player: {}", e.getKey());
             return true;
         });
+    }
+
+    /** Drop all in-flight upload state. Called when the server stops so it does not leak into a
+     *  later world load in the same JVM (singleplayer). */
+    public static void clear() {
+        IN_PROGRESS.clear();
+        UPLOAD_COOLDOWNS.clear();
     }
 
     private static long currentUploadFolderSize() {

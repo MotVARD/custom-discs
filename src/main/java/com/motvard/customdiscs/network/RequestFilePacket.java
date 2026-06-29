@@ -55,8 +55,8 @@ public record RequestFilePacket(String fileName) implements CustomPacketPayload 
             ServerPlayer player = (ServerPlayer) context.player();
 
             String safeName = CustomDiscFiles.sanitize(fileName);
-            if (CustomDiscFiles.isSuspiciousPath(safeName)) {
-                CustomDiscsMod.LOGGER.warn("[RequestFilePacket] Player {} requested suspicious path: {}",
+            if (CustomDiscFiles.isSuspiciousPath(safeName) || !CustomDiscFiles.isPublicUpload(safeName)) {
+                CustomDiscsMod.LOGGER.warn("[RequestFilePacket] Player {} requested non-public path: {}",
                         player.getName().getString(), fileName);
                 return;
             }
@@ -97,7 +97,9 @@ public record RequestFilePacket(String fileName) implements CustomPacketPayload 
                     return;
                 }
 
-                byte[] chunk = (bytesRead == buffer.length) ? buffer : Arrays.copyOf(buffer, bytesRead);
+                // Always copy: the packet is serialised asynchronously, so the next read()
+                // must not be able to overwrite the bytes in flight.
+                byte[] chunk = Arrays.copyOf(buffer, bytesRead);
                 PacketDistributor.sendToPlayer(player, new DownloadChunkPacket(safeName, chunk, offset, totalSize));
                 offset += bytesRead;
 

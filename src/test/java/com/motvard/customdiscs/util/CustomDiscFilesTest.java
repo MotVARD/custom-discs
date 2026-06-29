@@ -113,7 +113,7 @@ class CustomDiscFilesTest {
 
     @Test
     void chunkOffsetOverflowRejected() {
-        // offset + dataLength must not overflow int — the guard uses long arithmetic.
+        // offset + dataLength must not overflow int; the guard uses long arithmetic.
         assertFalse(CustomDiscFiles.isValidChunk(Integer.MAX_VALUE - 10, 256, Integer.MAX_VALUE));
     }
 }

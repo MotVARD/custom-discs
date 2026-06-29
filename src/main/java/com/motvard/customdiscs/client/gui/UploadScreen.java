@@ -24,10 +24,11 @@ public class UploadScreen extends Screen {
     private static final int CHUNK_SIZE = 256 * 1024;
 
     private EditBox titleEdit;
-    private File selectedFile;
+    private volatile File selectedFile;
     private volatile String status;
     private volatile boolean uploading = false;
     private volatile boolean waitingForServer = false;
+    private volatile long waitingSince = 0L;
     private volatile float progress = 0.0f;
 
     public UploadScreen() {
@@ -132,7 +133,9 @@ public class UploadScreen extends Screen {
             try (InputStream in = new BufferedInputStream(new FileInputStream(f), CHUNK_SIZE)) {
                 int n;
                 while ((n = in.read(buffer)) != -1) {
-                    byte[] chunk = (n == buffer.length) ? buffer : Arrays.copyOf(buffer, n);
+                    // Always copy: the packet is serialised asynchronously, so the next read()
+                    // must not overwrite the bytes in flight.
+                    byte[] chunk = Arrays.copyOf(buffer, n);
                     PacketDistributor.sendToServer(new UploadChunkPacket(fileName, title, chunk, offset, totalSize));
                     offset += n;
                     progress = Math.min(0.95f, (float) offset / totalSize);
@@ -143,6 +146,9 @@ public class UploadScreen extends Screen {
             }
 
             uploading = false;
+            // Set the timestamp before flipping the flag so the render thread never sees
+            // waitingForServer == true with a stale waitingSince (spurious instant timeout).
+            waitingSince = System.currentTimeMillis();
             waitingForServer = true;
             progress = 0.99f;
             status = Component.translatable("customdiscs.status.waiting_server").getString();
@@ -179,6 +185,16 @@ public class UploadScreen extends Screen {
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Don't wait forever if the server never confirms (e.g. the final chunk was dropped).
+        if (waitingForServer) {
+            long timeoutMs = Config.CLIENT.packetDownloadTimeoutSeconds.get() * 1000L;
+            if (System.currentTimeMillis() - waitingSince > timeoutMs) {
+                waitingForServer = false;
+                progress = 0.0f;
+                status = Component.translatable("customdiscs.status.upload_timeout").getString();
+            }
+        }
+
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         guiGraphics.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
         guiGraphics.drawCenteredString(this.font, this.status, this.width / 2, this.height / 2 + 50, 0xAAAAAA);

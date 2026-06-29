@@ -95,7 +95,7 @@ public final class CustomDiscsGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(
                         JukeboxTicker.hasSession(level.dimension(), abs),
                         "a playback session should exist after the disc was inserted"))
-                // Destroy the jukebox the way an explosion would — no BreakEvent.
+                // Destroy the jukebox the way an explosion would, with no BreakEvent.
                 .thenExecute(() -> helper.setBlock(rel, Blocks.AIR))
                 // The guaranteed-stop logic must clear the session and untrack the spot.
                 .thenWaitUntil(() -> {
