@@ -18,6 +18,7 @@
   "customdiscs.status.upload_interrupted": "Upload interrupted.",
   "customdiscs.status.upload_error": "Upload error: %s",
   "customdiscs.status.upload_timeout": "Timed out waiting for the server.",
+  "customdiscs.status.upload_busy": "Another upload is still in progress. Wait for it to finish.",
   "customdiscs.status.invalid_size": "Invalid file size.",
   "customdiscs.status.picker_error": "File selection error: %s",
   "customdiscs.status.waiting_server": "Processing on server...",
@@ -31,13 +32,14 @@
   "customdiscs.error.delete_failed": "Could not delete file: %s",
   "customdiscs.error.storage_full": "Server music storage is full, upload rejected.",
   "customdiscs.error.upload_quota_exceeded": "You already own %s uploaded tracks on this server. Delete one before uploading a new one.",
+  "customdiscs.error.name_taken": "A different file named %s is already on the server. Rename your file and try again.",
+  "customdiscs.error.no_permission": "You do not have permission to upload music on this server.",
+  "customdiscs.error.upload_in_progress": "%s is already being uploaded. Try again in a minute.",
 
   "customdiscs.info.file_exists": "Track already on server. Disc created: %s",
   "customdiscs.success.disc_created": "Disc created: %s",
   "customdiscs.success.file_deleted": "File deleted: %s",
 
   "customdiscs.command.list.header": "Uploaded files (%s):",
-  "customdiscs.command.list.empty": "No uploaded files on the server.",
-
-  "customdiscs.actionbar.playing": "♪ %s"
+  "customdiscs.command.list.empty": "No uploaded files on the server."
 }

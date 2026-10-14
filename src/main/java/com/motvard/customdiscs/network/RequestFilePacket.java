@@ -2,6 +2,7 @@ package com.motvard.customdiscs.network;
 
 import com.motvard.customdiscs.Config;
 import com.motvard.customdiscs.CustomDiscsMod;
+import com.motvard.customdiscs.server.FileTransfers;
 import com.motvard.customdiscs.util.CustomDiscFiles;
 import com.motvard.customdiscs.util.ModPaths;
 import net.minecraft.network.FriendlyByteBuf;
@@ -9,31 +10,11 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public record RequestFilePacket(String fileName) implements CustomPacketPayload {
-
-    private static final int CHUNK_SIZE = 256 * 1024;
-
-    private static final ExecutorService FILE_TRANSFER_EXECUTOR = Executors.newFixedThreadPool(
-            4, new ThreadFactory() {
-                final AtomicInteger seq = new AtomicInteger();
-                @Override public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r, "CustomDiscs-FileTransfer-" + seq.incrementAndGet());
-                    t.setDaemon(true);
-                    return t;
-                }
-            });
 
     public static final Type<RequestFilePacket> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(CustomDiscsMod.MOD_ID, "request_file"));
@@ -75,41 +56,7 @@ public record RequestFilePacket(String fileName) implements CustomPacketPayload 
                 return;
             }
 
-            CustomDiscsMod.LOGGER.debug("[RequestFilePacket] Sending {} ({} bytes) to player {}",
-                    safeName, length, player.getName().getString());
-            int totalSize = (int) length;
-
-            FILE_TRANSFER_EXECUTOR.submit(() -> sendFile(player, safeName, file, totalSize));
+            FileTransfers.request(player, safeName, file, (int) length);
         });
-    }
-
-    private static void sendFile(ServerPlayer player, String safeName, File file, int totalSize) {
-        long delayMs = Config.SERVER.chunkSendDelayMs.get();
-        try (FileInputStream fis = new FileInputStream(file)) {
-            byte[] buffer = new byte[CHUNK_SIZE];
-            int offset = 0;
-            int bytesRead;
-
-            while ((bytesRead = fis.read(buffer)) != -1) {
-                if (player.hasDisconnected()) {
-                    CustomDiscsMod.LOGGER.info("[RequestFilePacket] Player {} disconnected during transfer of {}",
-                            player.getName().getString(), safeName);
-                    return;
-                }
-
-                // Always copy: the packet is serialised asynchronously, so the next read()
-                // must not be able to overwrite the bytes in flight.
-                byte[] chunk = Arrays.copyOf(buffer, bytesRead);
-                PacketDistributor.sendToPlayer(player, new DownloadChunkPacket(safeName, chunk, offset, totalSize));
-                offset += bytesRead;
-
-                if (delayMs > 0) Thread.sleep(delayMs);
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } catch (IOException e) {
-            CustomDiscsMod.LOGGER.error("[RequestFilePacket] Error sending {} to player {}: {}",
-                    safeName, player.getName().getString(), e.getMessage());
-        }
     }
 }

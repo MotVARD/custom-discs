@@ -19,6 +19,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class UploadScreen extends Screen {
     private static final int CHUNK_SIZE = 256 * 1024;
@@ -30,6 +31,38 @@ public class UploadScreen extends Screen {
     private volatile boolean waitingForServer = false;
     private volatile long waitingSince = 0L;
     private volatile float progress = 0.0f;
+
+    /**
+     * One upload attempt, from the first chunk until the server answers it. The sending thread
+     * keeps going when the screen is closed, so this lives outside the screen instance.
+     */
+    private static final class Attempt {
+        /** Set when the server answers (success, deduplicated or rejected): stop sending. */
+        volatile boolean replied;
+        volatile long lastActivityMs;
+
+        Attempt(long now) {
+            this.lastActivityMs = now;
+        }
+    }
+
+    /**
+     * The client's only running upload. Replies carry no upload id, so a second upload is not
+     * started while one is unanswered: every reply then belongs to this attempt.
+     */
+    private static final AtomicReference<Attempt> CURRENT = new AtomicReference<>();
+
+    /** Called on the client thread for every {@code UploadCompletePacket}. */
+    public static void markServerReplied() {
+        Attempt attempt = CURRENT.getAndSet(null);
+        if (attempt != null) attempt.replied = true;
+    }
+
+    private static void release(Attempt attempt) {
+        CURRENT.compareAndSet(attempt, null);
+    }
+
+    private volatile Attempt attempt;
 
     public UploadScreen() {
         super(Component.translatable("customdiscs.screen.upload"));
@@ -106,14 +139,27 @@ public class UploadScreen extends Screen {
         }
         if (uploading || waitingForServer) return;
 
+        long now = System.currentTimeMillis();
+        long timeoutMs = Config.CLIENT.packetDownloadTimeoutSeconds.get() * 1000L;
+        Attempt previous = CURRENT.get();
+        if (previous != null && now - previous.lastActivityMs > timeoutMs) {
+            release(previous); // its reply was lost
+        }
+        Attempt started = new Attempt(now);
+        if (!CURRENT.compareAndSet(null, started)) {
+            // An upload started from an earlier (closed) upload screen is still running.
+            status = Component.translatable("customdiscs.status.upload_busy").getString();
+            return;
+        }
+        attempt = started;
         uploading = true;
         progress = 0.0f;
-        Thread t = new Thread(this::uploadTask, "CustomDiscs-Upload");
+        Thread t = new Thread(() -> uploadTask(started), "CustomDiscs-Upload");
         t.setDaemon(true);
         t.start();
     }
 
-    private void uploadTask() {
+    private void uploadTask(Attempt attempt) {
         try {
             File f = selectedFile;
             String fileName = f.getName();
@@ -122,6 +168,8 @@ public class UploadScreen extends Screen {
 
             if (size <= 0 || size > Integer.MAX_VALUE) {
                 status = Component.translatable("customdiscs.status.invalid_size").getString();
+                uploading = false; // otherwise the Upload button stays locked
+                release(attempt);
                 return;
             }
             int totalSize = (int) size;
@@ -133,40 +181,57 @@ public class UploadScreen extends Screen {
             try (InputStream in = new BufferedInputStream(new FileInputStream(f), CHUNK_SIZE)) {
                 int n;
                 while ((n = in.read(buffer)) != -1) {
+                    // The server already answered (rejected, or the file was already there):
+                    // sending the rest would only be thrown away.
+                    if (attempt.replied) break;
                     // Always copy: the packet is serialised asynchronously, so the next read()
                     // must not overwrite the bytes in flight.
                     byte[] chunk = Arrays.copyOf(buffer, n);
                     PacketDistributor.sendToServer(new UploadChunkPacket(fileName, title, chunk, offset, totalSize));
                     offset += n;
-                    progress = Math.min(0.95f, (float) offset / totalSize);
-                    status = Component.translatable("customdiscs.status.uploading",
-                            (int) (progress * 100)).getString();
+                    attempt.lastActivityMs = System.currentTimeMillis();
+                    reportProgress(attempt, Math.min(0.95f, (float) offset / totalSize));
                     Thread.sleep(10);
                 }
             }
 
-            uploading = false;
-            // Set the timestamp before flipping the flag so the render thread never sees
-            // waitingForServer == true with a stale waitingSince (spurious instant timeout).
-            waitingSince = System.currentTimeMillis();
-            waitingForServer = true;
-            progress = 0.99f;
-            status = Component.translatable("customdiscs.status.waiting_server").getString();
+            finishSending(attempt);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             status = Component.translatable("customdiscs.status.upload_interrupted").getString();
             uploading = false;
             waitingForServer = false;
+            release(attempt);
         } catch (IOException e) {
             status = Component.translatable("customdiscs.status.upload_error", e.getMessage()).getString();
             CustomDiscsMod.LOGGER.error("[Upload] Failure: {}", e.getMessage());
             uploading = false;
             waitingForServer = false;
+            release(attempt);
         }
     }
 
-    public void onServerResponse(boolean success, String message) {
+    /** Progress from the sending thread; never overwrites the server's answer once it arrived. */
+    private synchronized void reportProgress(Attempt attempt, float value) {
+        if (attempt.replied) return;
+        progress = value;
+        status = Component.translatable("customdiscs.status.uploading", (int) (value * 100)).getString();
+    }
+
+    /** All chunks sent (or sending stopped early): wait for the server unless it already replied. */
+    private synchronized void finishSending(Attempt attempt) {
+        uploading = false;
+        if (attempt.replied) return; // onServerResponse has set (or is about to set) the final status
+        // Set the timestamp before flipping the flag so the render thread never sees
+        // waitingForServer == true with a stale waitingSince (spurious instant timeout).
+        waitingSince = System.currentTimeMillis();
+        waitingForServer = true;
+        progress = 0.99f;
+        status = Component.translatable("customdiscs.status.waiting_server").getString();
+    }
+
+    public synchronized void onServerResponse(boolean success, String message) {
         waitingForServer = false;
         if (success) {
             progress = 1.0f;
@@ -190,6 +255,8 @@ public class UploadScreen extends Screen {
             long timeoutMs = Config.CLIENT.packetDownloadTimeoutSeconds.get() * 1000L;
             if (System.currentTimeMillis() - waitingSince > timeoutMs) {
                 waitingForServer = false;
+                Attempt timedOut = attempt;
+                if (timedOut != null) release(timedOut);
                 progress = 0.0f;
                 status = Component.translatable("customdiscs.status.upload_timeout").getString();
             }

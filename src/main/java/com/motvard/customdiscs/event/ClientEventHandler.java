@@ -3,7 +3,6 @@ package com.motvard.customdiscs.event;
 import com.motvard.customdiscs.client.DiscPlaybackManager;
 import com.motvard.customdiscs.client.audio.PacketFileDownloader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -35,11 +34,5 @@ public class ClientEventHandler {
         if (mc.level.getGameTime() % 5 == 0) {
             DiscPlaybackManager.stopOrphaned(mc.level);
         }
-
-        if (mc.level.getGameTime() % 20 != 0) return;
-
-        DiscPlaybackManager.getNearestPlayingTitle(mc.player.blockPosition()).ifPresent(title ->
-                mc.player.displayClientMessage(
-                        Component.translatable("customdiscs.actionbar.playing", title), true));
     }
 }

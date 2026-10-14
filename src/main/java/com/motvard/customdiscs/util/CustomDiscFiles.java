@@ -1,6 +1,7 @@
 package com.motvard.customdiscs.util;
 
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Pure file-name and transfer-chunk validation helpers shared by the upload,
@@ -9,6 +10,9 @@ import java.util.Locale;
 public final class CustomDiscFiles {
 
     private static final String[] ALLOWED_EXTENSIONS = {".wav", ".mp3", ".ogg"};
+
+    /** Version stamp of an uploaded file: {@code <size>-<lastModifiedMillis>}. */
+    private static final Pattern STAMP = Pattern.compile("\\d{1,19}-\\d{1,19}");
 
     private CustomDiscFiles() {}
 
@@ -52,6 +56,35 @@ public final class CustomDiscFiles {
                 && !name.startsWith(".")
                 && !name.endsWith(ModPaths.PARTIAL_SUFFIX)
                 && hasAllowedExtension(name);
+    }
+
+    /**
+     * Version stamp the server sends with every play packet. It changes when a file is replaced
+     * under the same name, so a client never plays an outdated cached copy.
+     */
+    public static String stamp(long size, long lastModifiedMillis) {
+        return size + "-" + lastModifiedMillis;
+    }
+
+    /** True if {@code stamp} has the {@link #stamp} format (and so is safe in a file name). */
+    public static boolean isValidStamp(String stamp) {
+        return stamp != null && STAMP.matcher(stamp).matches();
+    }
+
+    /** File size encoded in a valid stamp. */
+    public static long stampSize(String stamp) {
+        return Long.parseLong(stamp.substring(0, stamp.indexOf('-')));
+    }
+
+    /** Client cache file for one version of a track: {@code <stamp>_<name>}. */
+    public static String cacheFileName(String stamp, String safeName) {
+        return stamp + "_" + safeName;
+    }
+
+    /** True if a cache file name carries a version stamp (files cached before 1.2.0 do not). */
+    public static boolean isStampedCacheName(String fileName) {
+        int sep = fileName == null ? -1 : fileName.indexOf('_');
+        return sep > 0 && isValidStamp(fileName.substring(0, sep));
     }
 
     /** Validates a transfer chunk against the declared total file size. */

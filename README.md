@@ -18,6 +18,7 @@ Upload your own audio files and play them in Minecraft jukeboxes.
 - Synchronised playback for everyone in range
 - Configurable upload limits, per-player file limit, cooldown, and command permissions
 - Local client-side track cache with a size cap
+- Plays in the Sophisticated Backpacks / Storage jukebox upgrade (Sophisticated Core 1.4.2+)
 
 ---
 

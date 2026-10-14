@@ -2,21 +2,18 @@ package com.motvard.customdiscs.init;
 
 import com.motvard.customdiscs.CustomDiscsMod;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.JukeboxSong;
-import net.neoforged.neoforge.registries.DeferredHolder;
-import net.neoforged.neoforge.registries.DeferredRegister;
 
 public class ModJukeboxSongs {
 
-    public static final DeferredRegister<JukeboxSong> JUKEBOX_SONGS =
-            DeferredRegister.create(Registries.JUKEBOX_SONG, CustomDiscsMod.MOD_ID);
-
-    public static final DeferredHolder<JukeboxSong, JukeboxSong> DISC_SONG = JUKEBOX_SONGS.register("disc_song",
-            () -> new JukeboxSong(
-                    ModSounds.SILENT,
-                    Component.translatable("item.customdiscs.custom_music_disc"),
-                    1200.0f,
-                    15
-            ));
+    /**
+     * jukebox_song is a datapack registry, so the song itself is defined in
+     * data/customdiscs/jukebox_song/disc_song.json; a DeferredRegister entry would silently
+     * never be registered. The vanilla jukebox uses it to emit redstone power and comparator
+     * output while a custom disc plays; JukeboxTicker stops it when the real track ends.
+     */
+    public static final ResourceKey<JukeboxSong> DISC_SONG = ResourceKey.create(Registries.JUKEBOX_SONG,
+            ResourceLocation.fromNamespaceAndPath(CustomDiscsMod.MOD_ID, "disc_song"));
 }

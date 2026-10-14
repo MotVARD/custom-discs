@@ -2,6 +2,7 @@ package com.motvard.customdiscs.command;
 
 import com.motvard.customdiscs.Config;
 import com.motvard.customdiscs.network.OpenUploadScreenPacket;
+import com.motvard.customdiscs.server.TrackDurations;
 import com.motvard.customdiscs.server.UploadAttribution;
 import com.motvard.customdiscs.util.CustomDiscFiles;
 import com.motvard.customdiscs.util.ModPaths;
@@ -79,10 +80,11 @@ public class DiscCommand {
             ctx.getSource().sendSuccess(() -> Component.translatable("customdiscs.command.list.empty"), false);
             return 0;
         }
-        Map<String, String> uploaders = UploadAttribution.snapshot();
+        Map<String, UploadAttribution.Uploader> uploaders = UploadAttribution.snapshot();
         MutableComponent msg = Component.translatable("customdiscs.command.list.header", files.length);
         for (File f : files) {
-            String uploader = uploaders.getOrDefault(f.getName(), "?");
+            UploadAttribution.Uploader entry = uploaders.get(f.getName());
+            String uploader = entry != null ? entry.name() : "?";
             msg.append(Component.literal(
                     "\n  " + f.getName() + " - " + formatSize(f.length()) + " - " + uploader));
         }
@@ -102,6 +104,7 @@ public class DiscCommand {
         }
         if (file.delete()) {
             UploadAttribution.remove(safeName);
+            TrackDurations.invalidate(safeName);
             ctx.getSource().sendSuccess(() -> Component.translatable("customdiscs.success.file_deleted", safeName), true);
             return 1;
         } else {

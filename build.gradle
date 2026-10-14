@@ -12,6 +12,10 @@ group = 'com.motvard.customdiscs'
 repositories {
     mavenCentral()
     mavenLocal()
+    maven {
+        url 'https://api.modrinth.com/maven'
+        content { includeGroup 'maven.modrinth' }
+    }
 }
 
 base {
@@ -74,6 +78,10 @@ dependencies {
     // Instead we merge their class files directly into the mod JAR (one module, no conflict).
     audioEmbed 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
     audioEmbed 'com.googlecode.soundlibs:vorbisspi:1.0.3.3'
+
+    // Optional Sophisticated Backpacks / Storage jukebox support (compat/sophisticated). Compiled
+    // against the oldest version with the disc handler API; not bundled, not required at runtime.
+    compileOnly 'maven.modrinth:sophisticated-core:1.21.1-1.4.2.1467'
 
     testImplementation platform('org.junit:junit-bom:5.10.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'

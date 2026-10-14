@@ -116,4 +116,39 @@ class CustomDiscFilesTest {
         // offset + dataLength must not overflow int; the guard uses long arithmetic.
         assertFalse(CustomDiscFiles.isValidChunk(Integer.MAX_VALUE - 10, 256, Integer.MAX_VALUE));
     }
+
+    // ----- file version stamps -----
+
+    @Test
+    void stampRoundTripsThroughValidation() {
+        String stamp = CustomDiscFiles.stamp(12_345L, 1_760_000_000_000L);
+        assertEquals("12345-1760000000000", stamp);
+        assertTrue(CustomDiscFiles.isValidStamp(stamp));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "123", "-1", "1-", "a-1", "1-2-3", "../1-2", "1-2/x", "1-2 ", "12345678901234567890-1"})
+    void malformedStampsRejected(String stamp) {
+        assertFalse(CustomDiscFiles.isValidStamp(stamp));
+    }
+
+    @Test
+    void nullStampRejected() {
+        assertFalse(CustomDiscFiles.isValidStamp(null));
+    }
+
+    @Test
+    void cacheFileNameCarriesStamp() {
+        String name = CustomDiscFiles.cacheFileName("10-20", "my_song.mp3");
+        assertEquals("10-20_my_song.mp3", name);
+        assertTrue(CustomDiscFiles.isStampedCacheName(name));
+        // Same name, other version: a different cache file.
+        assertFalse(name.equals(CustomDiscFiles.cacheFileName("10-21", "my_song.mp3")));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"song.mp3", "my_song.mp3", "_song.mp3", "10_song.mp3", "song.mp3.partial"})
+    void unstampedCacheNamesDetected(String fileName) {
+        assertFalse(CustomDiscFiles.isStampedCacheName(fileName));
+    }
 }

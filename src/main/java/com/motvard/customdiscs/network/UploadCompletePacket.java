@@ -33,6 +33,7 @@ public record UploadCompletePacket(boolean success, String message) implements C
 
     public static void handle(UploadCompletePacket pkt, IPayloadContext ctx) {
         ctx.enqueueWork(() -> {
+            UploadScreen.markServerReplied();
             if (Minecraft.getInstance().screen instanceof UploadScreen screen) {
                 screen.onServerResponse(pkt.success(), pkt.message());
             }

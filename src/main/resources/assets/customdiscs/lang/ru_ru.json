@@ -18,6 +18,7 @@
   "customdiscs.status.upload_interrupted": "Загрузка прервана.",
   "customdiscs.status.upload_error": "Ошибка загрузки: %s",
   "customdiscs.status.upload_timeout": "Превышено время ожидания сервера.",
+  "customdiscs.status.upload_busy": "Предыдущая загрузка ещё не завершена. Дождитесь её окончания.",
   "customdiscs.status.invalid_size": "Некорректный размер файла.",
   "customdiscs.status.picker_error": "Ошибка выбора файла: %s",
   "customdiscs.status.waiting_server": "Обработка на сервере...",
@@ -31,13 +32,14 @@
   "customdiscs.error.delete_failed": "Не удалось удалить файл: %s",
   "customdiscs.error.storage_full": "Хранилище музыки на сервере переполнено, загрузка отклонена.",
   "customdiscs.error.upload_quota_exceeded": "У вас уже %s загруженных треков на этом сервере. Удалите один, прежде чем загружать новый.",
+  "customdiscs.error.name_taken": "На сервере уже есть другой файл с именем %s. Переименуйте файл и попробуйте снова.",
+  "customdiscs.error.no_permission": "У вас нет прав загружать музыку на этот сервер.",
+  "customdiscs.error.upload_in_progress": "%s уже загружается. Попробуйте через минуту.",
 
   "customdiscs.info.file_exists": "Трек уже есть на сервере. Пластинка создана: %s",
   "customdiscs.success.disc_created": "Пластинка создана: %s",
   "customdiscs.success.file_deleted": "Файл удалён: %s",
 
   "customdiscs.command.list.header": "Загруженные файлы (%s):",
-  "customdiscs.command.list.empty": "На сервере нет загруженных файлов.",
-
-  "customdiscs.actionbar.playing": "♪ %s"
+  "customdiscs.command.list.empty": "На сервере нет загруженных файлов."
 }
