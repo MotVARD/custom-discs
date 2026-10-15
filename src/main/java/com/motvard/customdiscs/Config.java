@@ -41,12 +41,17 @@ public class Config {
 
             builder.push("audio");
             maxAudibleDistance = builder
-                    .comment("Distance (blocks) at which client-side volume drops to zero.")
-                    .defineInRange("maxAudibleDistance", 64.0, 8.0, 256.0);
+                    .comment("Distance (in blocks) at which a playing disc fades to silence.",
+                             "This is the configurable audible range of jukeboxes. Works alongside",
+                             "Sound Physics Remastered (the disc plays as a normal positional record,",
+                             "so SPR applies its reverb/occlusion on top). Minimum 16 because the sound",
+                             "engine cannot fade a linear sound in under 16 blocks.")
+                    .defineInRange("maxAudibleDistance", 64.0, 16.0, 256.0);
             broadcastRadius = builder
                     .comment("Radius (blocks) within which the server sends playback packets to a player.",
-                             "Keep this >= maxAudibleDistance + ~16 so a moving player does not briefly",
-                             "lose audio while crossing the threshold.")
+                             "Automatically treated as at least maxAudibleDistance so audio is never cut",
+                             "before it fades out; raise it above that only to add a head-start margin for",
+                             "fast-moving players.")
                     .defineInRange("broadcastRadius", 80.0, 16.0, 320.0);
             builder.pop();
 
@@ -103,6 +108,14 @@ public class Config {
 
     public static final ModConfigSpec CLIENT_SPEC;
     public static final Client CLIENT;
+
+    /**
+     * Radius the server uses to send/stop playback. Never smaller than the audible distance,
+     * so a configured fade distance is never truncated by the network range.
+     */
+    public static double effectiveBroadcastRadius() {
+        return Math.max(SERVER.broadcastRadius.get(), SERVER.maxAudibleDistance.get());
+    }
 
     static {
         final Pair<Server, ModConfigSpec> serverPair = new ModConfigSpec.Builder().configure(Server::new);

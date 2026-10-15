@@ -7,17 +7,16 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.block.Blocks;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.JukeboxBlock;
 
-import java.util.Comparator;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Client-side registry of active sound instances per jukebox. Hands playback off to
- * Minecraft's {@link SoundManager} — OpenAL handles 3D positioning, distance attenuation,
- * panning and occlusion natively. No more per-disc threads or audio lines.
+ * Client-side registry of active sound instances per jukebox. Playback is handed to
+ * Minecraft's {@link SoundManager}, so OpenAL handles 3D positioning, distance attenuation,
+ * panning and occlusion.
  */
 public class DiscPlaybackManager {
 
@@ -25,16 +24,27 @@ public class DiscPlaybackManager {
 
     private DiscPlaybackManager() {}
 
-    public static void play(BlockPos pos, String source, String title, long startOffsetMs) {
-        CustomDiscSoundInstance instance = new CustomDiscSoundInstance(pos, source, title, startOffsetMs);
+    public static void play(BlockPos pos, String source, String stamp, String title, long startOffsetMs) {
+        CustomDiscSoundInstance instance = new CustomDiscSoundInstance(pos, source, stamp, title, startOffsetMs);
 
         CustomDiscSoundInstance previous = ACTIVE.put(pos.immutable(), instance);
         if (previous != null) {
             Minecraft.getInstance().getSoundManager().stop(previous);
         }
 
-        CustomDiscsMod.LOGGER.debug("[DiscPlaybackManager] Start: «{}» @ {} (offset={}ms)", title, pos, startOffsetMs);
+        CustomDiscsMod.LOGGER.debug("[DiscPlaybackManager] Start: '{}' @ {} (offset={}ms)", title, pos, startOffsetMs);
         Minecraft.getInstance().getSoundManager().play(instance);
+        showNowPlaying(instance.title());
+    }
+
+    /**
+     * Vanilla-style "Now Playing" overlay, shown once when a track starts for this player
+     * (including on walking into range of a playing jukebox) instead of repeating every second.
+     * It also replaces the generic "Custom Music Disc" vanilla shows for the placeholder song.
+     */
+    public static void showNowPlaying(String title) {
+        if (title == null || title.isEmpty()) return;
+        Minecraft.getInstance().gui.setNowPlaying(Component.literal(title));
     }
 
     public static void stop(BlockPos pos) {
@@ -46,12 +56,8 @@ public class DiscPlaybackManager {
     }
 
     public static void stopAll() {
-        // Order matters on shutdown. Fail every in-flight download FIRST so the
-        // BlockingInputStream feeding each AudioStream wakes up with an
-        // IOException — the SoundEngine streaming reader thread then unwinds
-        // immediately. If we stopped sounds first, the SoundEngine destroy()
-        // could deadlock waiting for the streaming reader to finish a read()
-        // that nobody is ever going to satisfy.
+        // Fail in-flight downloads before stopping sounds. Otherwise SoundEngine.destroy() can
+        // deadlock waiting on a streaming read() that nobody will ever satisfy.
         PacketFileDownloader.cancelAll();
         SoundManager mgr = Minecraft.getInstance().getSoundManager();
         for (CustomDiscSoundInstance instance : ACTIVE.values()) {
@@ -73,20 +79,12 @@ public class DiscPlaybackManager {
             if (!mgr.isActive(instance)) {
                 return true; // finished naturally
             }
-            if (level.isLoaded(pos) && !level.getBlockState(pos).is(Blocks.JUKEBOX)) {
-                CustomDiscsMod.LOGGER.debug("[DiscPlaybackManager] Jukebox gone @ {} — stopping orphaned track", pos);
+            if (level.isLoaded(pos) && !(level.getBlockState(pos).getBlock() instanceof JukeboxBlock)) {
+                CustomDiscsMod.LOGGER.debug("[DiscPlaybackManager] Jukebox gone @ {}, stopping orphaned track", pos);
                 mgr.stop(instance);
                 return true;
             }
             return false;
         });
-    }
-
-    public static Optional<String> getNearestPlayingTitle(BlockPos playerPos) {
-        SoundManager mgr = Minecraft.getInstance().getSoundManager();
-        return ACTIVE.entrySet().stream()
-                .filter(e -> mgr.isActive(e.getValue()))
-                .min(Comparator.comparingDouble(e -> e.getKey().distSqr(playerPos)))
-                .map(e -> e.getValue().title());
     }
 }

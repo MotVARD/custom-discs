@@ -11,18 +11,17 @@ import java.util.Deque;
  * The producer hands over already-allocated {@code byte[]} buffers via {@link #offer(byte[])};
  * the consumer reads them through the standard {@link InputStream} API. Backpressure is
  * applied at {@link #offer} when the total buffered byte count would exceed the cap.
- *
- * <p>Why not {@link java.io.PipedInputStream}? It is documented to break when the writer
- * thread changes or dies, and races at close-time are notorious. A small explicit deque
- * with explicit lock signalling is simpler and more predictable.
+ * Uses an explicit deque rather than {@link java.io.PipedInputStream}, which is fragile when
+ * the writer thread dies and races at close time.
  */
 public final class BlockingInputStream extends InputStream {
 
-    /** Safety net: a producer that vanishes (network died, world unloaded,
-     *  shutdown hook missed) should not be able to pin a SoundEngine streaming
-     *  reader thread forever. After this long without progress, read() throws. */
-    private static final long READ_STARVATION_TIMEOUT_MS = 30_000L;
+    /** Fallback read timeout when none is supplied. */
+    private static final long DEFAULT_READ_TIMEOUT_MS = 30_000L;
 
+    /** If the producer makes no progress for this long, read() throws instead of pinning the
+     *  SoundEngine streaming reader thread forever (e.g. network died, world unloaded). */
+    private final long readTimeoutMs;
     private final int maxBufferedBytes;
     private final Deque<byte[]> queue = new ArrayDeque<>();
     private final Object lock = new Object();
@@ -36,12 +35,17 @@ public final class BlockingInputStream extends InputStream {
     private IOException failure;
 
     public BlockingInputStream(int maxBufferedBytes) {
+        this(maxBufferedBytes, DEFAULT_READ_TIMEOUT_MS);
+    }
+
+    public BlockingInputStream(int maxBufferedBytes, long readTimeoutMs) {
         if (maxBufferedBytes < 1) throw new IllegalArgumentException("maxBufferedBytes must be > 0");
         this.maxBufferedBytes = maxBufferedBytes;
+        this.readTimeoutMs = readTimeoutMs > 0 ? readTimeoutMs : DEFAULT_READ_TIMEOUT_MS;
     }
 
     /**
-     * Producer side. Blocks while the buffer is full — that is the backpressure signal.
+     * Producer side. Blocks while the buffer is full, which is the backpressure signal.
      * After {@link #finish()}, {@link #fail(IOException)} or {@link #close()} this is a no-op.
      */
     public void offer(byte[] data) throws InterruptedException {
@@ -132,14 +136,14 @@ public final class BlockingInputStream extends InputStream {
                 if (finished) return false;
                 try {
                     long before = System.nanoTime();
-                    lock.wait(READ_STARVATION_TIMEOUT_MS);
+                    lock.wait(readTimeoutMs);
                     long waitedMs = (System.nanoTime() - before) / 1_000_000L;
                     // If we woke up still empty and the producer hasn't signalled us
                     // in this window, treat it as a hung producer and bail out.
                     if (queue.isEmpty() && !finished && failure == null && !closed
-                            && waitedMs >= READ_STARVATION_TIMEOUT_MS) {
+                            && waitedMs >= readTimeoutMs) {
                         throw new IOException("BlockingInputStream timed out after "
-                                + READ_STARVATION_TIMEOUT_MS + "ms with no data");
+                                + readTimeoutMs + "ms with no data");
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();

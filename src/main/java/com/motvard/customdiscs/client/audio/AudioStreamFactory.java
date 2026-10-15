@@ -18,7 +18,7 @@ import java.io.InputStream;
  * Opens an {@link AudioInputStream} with PCM output regardless of the source format.
  *
  * Direct instantiation of MP3/OGG readers is required because build.gradle excludes
- * META-INF/services to avoid split-package conflicts with JPMS named modules — without
+ * META-INF/services to avoid split-package conflicts with JPMS named modules; without the
  * service files, AudioSystem cannot discover the SPI providers via ServiceLoader.
  */
 public final class AudioStreamFactory {
@@ -34,9 +34,9 @@ public final class AudioStreamFactory {
         AudioInputStream encoded = tryReaders(sniffable, sourceTag);
         AudioFormat baseFormat = encoded.getFormat();
 
-        // TrackPlayer.applyGainInPlace only handles 16-bit signed little-endian PCM.
-        // Pass through only that exact format; 8/24-bit WAV, big-endian AIFF, MP3 and
-        // OGG all fall through to conversion below.
+        // PcmAudioStream only accepts 16-bit signed little-endian PCM, so pass through only
+        // that exact format; 8/24-bit WAV, big-endian AIFF, MP3 and OGG fall through to the
+        // conversion below.
         if (isCanonicalPcm(baseFormat)) {
             return encoded;
         }
@@ -101,7 +101,7 @@ public final class AudioStreamFactory {
             return AudioSystem.getAudioInputStream(bis);
         } catch (UnsupportedAudioFileException e) {
             CustomDiscsMod.LOGGER.error("[AudioStreamFactory] Unrecognized format: {} (previous error: {})",
-                    sourceTag, lastError != null ? lastError.getMessage() : "—");
+                    sourceTag, lastError != null ? lastError.getMessage() : "none");
             throw e;
         }
     }

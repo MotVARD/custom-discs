@@ -12,7 +12,6 @@ public class ModSounds {
     public static final DeferredRegister<SoundEvent> SOUNDS =
             DeferredRegister.create(Registries.SOUND_EVENT, CustomDiscsMod.MOD_ID);
 
-    public static final DeferredHolder<SoundEvent, SoundEvent> SILENT = registerSound("silent");
     public static final DeferredHolder<SoundEvent, SoundEvent> TRACK_STREAM = registerSound("track_stream");
 
     private static DeferredHolder<SoundEvent, SoundEvent> registerSound(String name) {

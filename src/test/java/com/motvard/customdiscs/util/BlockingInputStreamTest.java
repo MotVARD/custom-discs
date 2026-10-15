@@ -85,9 +85,9 @@ class BlockingInputStreamTest {
         // Drain one byte to free space
         assertEquals(1, s.read());
         Thread.sleep(50);
-        assertEquals(1, phase.get(), "still 1 byte short of space — must remain blocked");
+        assertEquals(1, phase.get(), "still 1 byte short of space, must remain blocked");
 
-        // Drain one more — now 2 bytes are free and producer can write
+        // Drain one more, now 2 bytes are free and producer can write
         assertEquals(2, s.read());
         producer.join(1000);
         assertEquals(2, phase.get());
