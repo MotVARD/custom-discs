@@ -1,0 +1,11 @@
+{
+  "track_stream": {
+    "category": "record",
+    "sounds": [
+      {
+        "name": "minecraft:ambient/cave/cave1",
+        "stream": true
+      }
+    ]
+  }
+}

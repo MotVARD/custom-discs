@@ -1,0 +1,152 @@
+plugins {
+    id 'java'
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.neoforged.gradle.userdev' version '7.0.145'
+}
+
+version = mod_version
+group = 'com.motvard.customdiscs'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+    maven {
+        url 'https://api.modrinth.com/maven'
+        content { includeGroup 'maven.modrinth' }
+    }
+}
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+runs {
+    configureEach {
+        systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+    }
+
+    client {
+        systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+    }
+
+    server {
+        programArgument '--nogui'
+        systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+    }
+
+    gameTestServer {
+        systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+    }
+
+    data {
+        programArguments.addAll '--mod', mod_id,
+                '--all',
+                '--output', file('src/generated/resources/').getAbsolutePath(),
+                '--existing', file('src/main/resources/').getAbsolutePath()
+    }
+}
+
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
+}
+
+configurations.all {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+        if (details.requested.group == 'org.ow2.asm') {
+            details.useVersion '9.7'
+            details.because 'Force ASM 9.7 to avoid module path conflicts with 9.5'
+        }
+    }
+}
+
+configurations {
+    audioEmbed
+    // make audioEmbed classes available at compile & runtime
+    implementation.extendsFrom(audioEmbed)
+}
+
+dependencies {
+    implementation "net.neoforged:neoforge:${neo_version}"
+
+    // MP3/OGG support. Cannot use jarJar: mp3spi and vorbisspi both contain package
+    // javazoom.spi, and NeoForge loads jar-in-jar files as named JPMS modules; Java 9+
+    // forbids split packages between named modules (ResolutionException at startup).
+    // Instead we merge their class files directly into the mod JAR (one module, no conflict).
+    audioEmbed 'com.googlecode.soundlibs:mp3spi:1.9.5.4'
+    audioEmbed 'com.googlecode.soundlibs:vorbisspi:1.0.3.3'
+
+    // Optional Sophisticated Backpacks / Storage jukebox support (compat/sophisticated). Compiled
+    // against the oldest version with the disc handler API; not bundled, not required at runtime.
+    compileOnly 'maven.modrinth:sophisticated-core:1.21.1-1.4.2.1467'
+
+    testImplementation platform('org.junit:junit-bom:5.10.3')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+}
+
+// Merge audio library classes into the mod JAR at build time.
+// We drop the manifest, JPMS descriptor, signatures and SPI service files (the audio
+// readers are instantiated directly), but KEEP any LICENSE/NOTICE files: the embedded
+// mp3spi/vorbisspi/tritonus libraries are LGPL and must ship with their license.
+tasks.named('jar', Jar).configure {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    // GameTests are dev-only: they run via the gameTestServer task, not in production.
+    exclude 'com/motvard/customdiscs/gametest/**'
+    exclude 'data/customdiscs/structure/**'
+    from({
+        configurations.audioEmbed.collect { zipTree(it) }
+    }) {
+        exclude 'META-INF/MANIFEST.MF'
+        exclude 'META-INF/*.SF'
+        exclude 'META-INF/*.RSA'
+        exclude 'META-INF/*.DSA'
+        exclude 'META-INF/services/**'
+        exclude 'META-INF/versions/**'
+        exclude 'META-INF/maven/**'
+        exclude '**/module-info.class'
+        // jorbis + jogg are already bundled with Minecraft, and embedding them causes a
+        // split-package ResolutionException. vorbisspi will use Minecraft's copies.
+        exclude 'com/jcraft/**'
+    }
+}
+
+tasks.withType(ProcessResources).configureEach {
+    var replaceProperties = [
+        minecraft_version      : minecraft_version,
+        minecraft_version_range: minecraft_version_range,
+        neo_version            : neo_version,
+        neo_version_range      : neo_version_range,
+        loader_version_range   : loader_version_range,
+        mod_id                 : mod_id,
+        mod_name               : mod_name,
+        mod_license            : mod_license,
+        mod_version            : mod_version,
+        mod_authors            : mod_authors,
+        mod_description        : mod_description
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/neoforge.mods.toml']) {
+        expand replaceProperties
+    }
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/mcmodsrepo"
+        }
+    }
+}
